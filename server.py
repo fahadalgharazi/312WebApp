@@ -22,8 +22,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         # print(request.path + " path is printed")
         # print(request.http_version + "  version is printed")
         # print(request.headers)
-        mongoclient = MongoClient("mongo")
-        # mongoclient = MongoClient("localhost")
+        # mongoclient = MongoClient("mongo")
+        mongoclient = MongoClient("localhost")
         db = mongoclient["cse312"]
         chat_collection = db["chat"]
         user_collection = db["users"]
