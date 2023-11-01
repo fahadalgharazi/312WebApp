@@ -122,23 +122,23 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 # print(request.headers)
                 #
                 hol = False
-                print(request.headers)
+                # print(request.headers)
                 cookieheader = request.headers.get("Cookie")
-                print(cookieheader)
+                # print(cookieheader)
                 if cookieheader != None:
                     cookieheader = cookieheader.split(";")
-                    print(cookieheader)
+                    # print(cookieheader)
                     for cookie in cookieheader:
                         cookie = cookie.split("=")
-                        print("cookiies: "+ str(cookie))
+                        # print("cookiies: "+ str(cookie))
                         if cookie[0] == "Auth" or cookie[0] == " Auth":
                             # bcrypt.checkpw(password.encode(), user_collection.find_one({"username": username})["password"]):
                             user = user_collection.find_one({"Auth": cookie[1]})
-                            print("got user using cookie:"+ str(user))
+                            # print("got user using cookie:"+ str(user))
                             chat_collection.insert_one({"username": user["username"], "message": message})
                             hol = True
                 if hol == False:
-                    print("guest")
+                    # print("guest")
                     chat_collection.insert_one({"username": "Guest", "message": message})
                 text = "ok"
                 textLen = len(text.encode())
@@ -170,7 +170,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             body = request.body.decode()
             #inputted hello and hi for username and password
             # username_reg=hello&password_reg=hi
-            # print(request.headers["Content-Length"])
+            # print(request.headers[
+            # "Content-Length"])
             length = request.headers["Content-Length"]
             username = body.split("&")[0].split("=")[1]
             print(username)
@@ -213,6 +214,27 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: application/json; charset=utf-8" + "\r\n" + "Content-Length: " + str(length) + "\r\n" + "X-Content-Type-Options: nosniff" +"\r\n\r\n" + indexJson
             self.request.sendall(responseString.encode())
 
+        elif request.path == "/profile-pic":
+            cookieheader = request.headers.get("Cookie")
+            print("profiel pic")
+            if cookieheader != None:
+                cookieheader = cookieheader.split(";")
+                # print(cookieheader)
+                for cookie in cookieheader:
+                    cookie = cookie.split("=")
+                    # print("cookiies: " + str(cookie))
+                    if cookie[0] == "Auth" or cookie[0] == " Auth":
+                        print("user logged in")
+                        ##save the file into the disk
+                        # user_collection
+                        for user in user_collection.find({}):
+                            print(user)
+                            # if user["Auth"] ==
+                        ###store the name of the file in the disk
+            else:
+                print("not logged in")
+
+
         chat = chat_collection.find({})
         for mess in chat:
             # print(mess["_id"])
@@ -252,8 +274,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                                 textLen = len(text)
                                 responseString = "" + request.http_version + " 403 Forbidden" + "\r\n" + "Content-Type: text/plain; charset=utf-8" + "\r\n" + "Content-Length: " + str(textLen) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n" + text
                                 self.request.sendall(responseString.encode())
-
-
 
         else:
             text = "content not found"
