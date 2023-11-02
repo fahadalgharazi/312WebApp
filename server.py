@@ -41,8 +41,31 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             read = index.read()
             indexLength = len(read)
             read = read.decode()
+            ########login
+            cookieheader = request.headers.get("Cookie")
+            print("profiel pic")
+            if cookieheader != None:
+                cookieheader = cookieheader.split(";")
+                # print(cookieheader)
+                for cookie in cookieheader:
+                    cookie = cookie.split("=")
+                    # print("cookiies: " + str(cookie))
+                    if cookie[0] == "Auth" or cookie[0] == " Auth":
+                        print("user logged in")
+                        ##save the file into the disk
+                        # user_collection
+                        userCookie = cookie[1]
+                        for user in user_collection.find({}):
+                            if user["Auth"] == userCookie:
+                                username = user["username"]
+                                print("inside if "+user["pic"])
+                                read = read.replace("public/image/eagle.jpg", user["pic"])
+                                print(read)
+                                indexLength = len(read.encode())
+
             responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: " + str(indexLength) + "\r\n"+"X-Content-Type-Options: nosniff""\r\n\r\n" + read
             responseString = responseString.strip()
+            # print(responseString)
             # print(responseString)
             self.request.sendall(responseString.encode())
 
@@ -236,14 +259,16 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                                 fileName = "public/image/"+username + ".jpg"
                                 with open(fileName, "wb") as f:
                                     data = request.body
-                                    print(data)
+                                    # print(data)
                                     f.write(data)
                                     user_collection.update_one({"username": username}, {"$set": {"pic": fileName}})
 
             else:
-
                 print("not logged in")
-
+                print(request.http_version)
+            responseString = "" + str(request.http_version) + " 302 OK" + "\r\n"+"Location: /" + "\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: 0" + "\r\n" + "X-Content-Type-Options: nosniff" +"\r\n\r\n"
+            responseString = responseString.encode()
+            self.request.sendall(responseString)
 
         chat = chat_collection.find({})
         for mess in chat:

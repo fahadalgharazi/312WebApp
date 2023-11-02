@@ -34,7 +34,7 @@ def pic(request):
     # print(requestSplit[2])
     file = requestSplit[2].split("-".encode())
 
-    print({"method":meth,"path":path,"headers":headers,"body":file[0]})
+    # print({"method":meth,"path":path,"headers":headers,"body":file[0]})
     return {"method":meth,"path":path,"headers":headers,"body":file[0],"http":http}
 
 class Request:
