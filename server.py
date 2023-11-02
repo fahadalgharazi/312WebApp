@@ -227,11 +227,21 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                         print("user logged in")
                         ##save the file into the disk
                         # user_collection
+                        userCookie = cookie[1]
                         for user in user_collection.find({}):
-                            print(user)
-                            # if user["Auth"] ==
-                        ###store the name of the file in the disk
+                            if user["Auth"] == userCookie:
+                                username = user["username"]
+                                print(user["username"])
+                                # using W with open creates a file
+                                fileName = "public/image/"+username + ".jpg"
+                                with open(fileName, "wb") as f:
+                                    data = request.body
+                                    print(data)
+                                    f.write(data)
+                                    user_collection.update_one({"username": username}, {"$set": {"pic": fileName}})
+
             else:
+
                 print("not logged in")
 
 

@@ -32,7 +32,7 @@ def pic(request):
         headers[item.split(": ")[0]] = item.split(": ")[1]
     # requestSplit[1] = requestSplit[1].split(("\r\n"+bound+"--"+"\r\n").encode())
     # print(requestSplit[2])
-    file = requestSplit[2].split("\r\n-".encode())
+    file = requestSplit[2].split("-".encode())
 
     print({"method":meth,"path":path,"headers":headers,"body":file[0]})
     return {"method":meth,"path":path,"headers":headers,"body":file[0],"http":http}
