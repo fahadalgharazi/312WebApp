@@ -1,5 +1,5 @@
 def pic(request):
-    # print(request)
+    print(request)
     newLine = "\r\n\r\n".encode()
 
     requestSplit = request.split(newLine)
@@ -53,6 +53,7 @@ class Request:
             self.http_version = res["http"]
 
         else:
+            print(request)
             decoded = request.decode()
             decoded.strip()
             # print("preprocc" + str(decoded))

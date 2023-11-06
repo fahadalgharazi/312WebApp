@@ -7,31 +7,32 @@ import secrets
 from pymongo import MongoClient
 import hashlib
 from util.request import Request
+from util.sockParse import SockParse
+
+import base64
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
     # mongoclient = MongoClient("mongo") for docker
-
+    # counter = 0
+    # websocket_connections = []
     def handle(self):
+            # while True:
+        # MyTCPHandler.counter += 1
         received_data = self.request.recv(2048)
-        # print(self.client_address)
-        # print("--- received data ---")
-        # print(received_data)
-        # print("--- end of data ---\n\n")
+        if len(received_data) == 0:
+            return
         request = Request(received_data)
-        # print(request.method +" method is printed")
-        # print(request.path + " path is printed")
-        # print(request.http_version + "  version is printed")
-        # print(request.headers)
+        # MyTCPHandler.websocket_connections.append(self.request)
         # mongoclient = MongoClient("mongo")
         mongoclient = MongoClient("localhost")
         db = mongoclient["cse312"]
         chat_collection = db["chat"]
         user_collection = db["users"]
+        # received_data = self.request.recv(2048)
+        print(received_data)
 
-        # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
-        #divide the headers from the body
-        #subdivide with \r\n for the headers
-        #divide the first header line using spaces to get the path and other stuff
+    # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
+
         pictures = os.listdir('public/image')
         for i in range(len(pictures)):
             pictures[i] = "/public/image/" + pictures[i]
@@ -43,7 +44,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             read = read.decode()
             ########login
             cookieheader = request.headers.get("Cookie")
-            print("profiel pic")
+            # print("profiel pic")
             if cookieheader != None:
                 cookieheader = cookieheader.split(";")
                 # print(cookieheader)
@@ -51,16 +52,16 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     cookie = cookie.split("=")
                     # print("cookiies: " + str(cookie))
                     if cookie[0] == "Auth" or cookie[0] == " Auth":
-                        print("user logged in")
+                        # print("user logged in")
                         ##save the file into the disk
                         # user_collection
                         userCookie = cookie[1]
                         for user in user_collection.find({}):
                             if user["Auth"] == userCookie:
                                 username = user["username"]
-                                print("inside if "+user["pic"])
+                                # print("inside if "+user["pic"])
                                 read = read.replace("public/image/eagle.jpg", user["pic"])
-                                print(read)
+                                # print(read)
                                 indexLength = len(read.encode())
 
             responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: " + str(indexLength) + "\r\n"+"X-Content-Type-Options: nosniff""\r\n\r\n" + read
@@ -90,18 +91,24 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             responseString = responseString.strip()
             self.request.sendall(responseString.encode())
 
-
         elif request.path in pictures:
-            index = open(request.path[1:], "rb").read()
-            indexLength = len(index)
-            responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: image/jpeg" + "\r\n" + "Content-Length: " + str(indexLength) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
-            # print(responseString)
-            responseString = responseString.encode()
-            responseString += index
-            # print(responseString)
-            self.request.sendall(responseString)
+            # print(request.path)
+            #######send 404
+            split = request.path.split("/")[3]
+            if "/" not in split:
+                # print(split)
+                # pictures[i] = "/public/image/" + pictures[i]
+                # if "/" not in request.path:
+                index = open(request.path[1:], "rb").read()
+                indexLength = len(index)
+                responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: image/jpeg" + "\r\n" + "Content-Length: " + str(indexLength) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
+                # print(responseString)
+                responseString = responseString.encode()
+                responseString += index
+                # print(responseString)
+                self.request.sendall(responseString)
 
-        elif request.path in "/favicon.ico":
+        elif request.path == "/favicon.ico":
             index = open("public/image/kitten.jpg", "rb").read()
             indexLength = len(index)
             responseString = "" + request.http_version + " 200 OK" + "\r\n" + "Content-Type: image/jpeg" + "\r\n" + "Content-Length: " + str(indexLength) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
@@ -186,7 +193,111 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             # auth = b""
             user_collection.insert_one({"username": username,"password":hashedPassword,"Auth": None})
 
+        elif request.path == "/websocket":
+            key = request.headers["Sec-WebSocket-Key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+            sha1 = hashlib.sha1()
+            sha1.update(key.encode())
+            key = sha1.digest()
+            baseKey = base64.b64encode(key).decode()
+            username = ""
+            hol = False
+            cookieheader = request.headers.get("Cookie")
+            if cookieheader != None:
+                cookieheader = cookieheader.split(";")
+                for cookie in cookieheader:
+                    cookie = cookie.split("=")
+                    if cookie[0] == "Auth" or cookie[0] == " Auth":
+                        user = user_collection.find_one({"Auth": cookie[1]})
+                        username = user["username"]
+                        print(username)
+                        hol = True
+            if hol == False:
+                username = "guest"
+
+            responseString = "" + request.http_version + " 101 Switching Protocols" + "\r\n" +"Upgrade: websocket"+"\r\n" +"Connection: Upgrade"+"\r\n"+"Sec-WebSocket-Accept: " + baseKey+"\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: " + str(0) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
+            # print(responseString)
+            self.request.sendall(responseString.encode())
+            while True:
+                received_data = self.request.recv(2048)
+                # print(received_data)
+                opcode = received_data[0] & 15 # 0000 1111the first 4 bits are zeroed and the last 4 are opcode
+                print(opcode)
+                finBit = received_data[0] & 128 #1000 0000 gets the first bit
+                if finBit == 128:
+                    finBit = 1
+                else:
+                    finBit = 0
+                print(finBit)
+                mask = received_data[1] & 128
+                if mask == 128:
+                    mask = 1
+                else:
+                    mask = 0
+                print(mask)
+                payloadLen = received_data[1] & 127
+                print(payloadLen)
+                payloadLenCopy = payloadLen
+                payload = bytearray()
+                #how should I accumalate the payload?
+                if mask == 1:
+                    maskingKey = received_data[2:6]
+                    i = 6
+
+                    while payloadLenCopy >=4:
+                        payload.append(received_data[i] ^ maskingKey[0])
+                        payload.append(received_data[i+1] ^ maskingKey[1])
+                        payload.append(received_data[i+2] ^ maskingKey[2])
+                        payload.append(received_data[i+3] ^ maskingKey[3])
+                        i +=4
+                        payloadLenCopy -= 4
+                    m = 0
+                    while payloadLenCopy != 0:
+                        payload.append(received_data[i] ^ maskingKey[m])
+                        i += 1
+                        m +=1
+                        payloadLenCopy -=1
+
+                else:
+                    while payloadLenCopy != 0:
+                        payload.append(received_data[i])
+                        i += 1
+                        payloadLenCopy -=1
+
+                # print(payload)
+                # print(payload.decode())
+                payload = payload.decode()
+                print(payload)
+                payload = json.loads(payload)
+                print(payload["message"])#user comment
+                message = payload["message"]
+                type = payload["messageType"]
+                id = username + secrets.token_hex()
+                #escape user comments
+
+                message = message.replace("&","&amp;")
+                message = message.replace("<","&lt;")
+                message = message.replace(">","&gt;")
+                ###
+                payload["message"] = message
+                payload["id"] = id
+                payload["username"] = username
+                payloadJson = json.dumps(payload)
+                payloadJson = payloadJson.encode()
+                sendPayloadLen = len(payloadJson)
+                sendArr = bytearray()
+                byte1 = finBit *128 + opcode
+                sendArr.append(byte1)
+                sendArr.append(sendPayloadLen)
+                sendArr.append(payloadJson)
+                print(sendArr)
+                #add the numbers together
+                #how to put the bits together into a byte and send?
+                #What should I do when I send a frame?
+                    #
+                #This loop should be running forever right?
+                    #stop it when I get the opcode to stop it and self to end it on that specific object
+                pass
 
         elif request.path == "/login":
             #get the username and the password from the encoded url whcih will be in the body of the request
@@ -266,7 +377,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             else:
                 print("not logged in")
                 print(request.http_version)
-            responseString = "" + str(request.http_version) + " 302 OK" + "\r\n"+"Location: /" + "\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: 0" + "\r\n" + "X-Content-Type-Options: nosniff" +"\r\n\r\n"
+            responseString = "" + str(request.http_version) + " 302 FOUND" + "\r\n"+"Location: /" + "\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: 0" + "\r\n" + "X-Content-Type-Options: nosniff" +"\r\n\r\n"
             responseString = responseString.encode()
             self.request.sendall(responseString)
 
@@ -326,7 +437,8 @@ def main():
 
     socketserver.TCPServer.allow_reuse_address = True
 
-    server = socketserver.TCPServer((host, port), MyTCPHandler)
+    server = socketserver.ThreadingTCPServer((host, port), MyTCPHandler)
+
 
     print("Listening on port " + str(port))
     sys.stdout.flush()
