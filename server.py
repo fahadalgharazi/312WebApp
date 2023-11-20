@@ -13,8 +13,8 @@ import base64
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
     # mongoclient = MongoClient("mongo") for docker
-    # counter = 0
-    # websocket_connections = []
+    counter = 0
+    websocket_connections = []
     def handle(self):
             # while True:
         # MyTCPHandler.counter += 1
@@ -29,7 +29,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         chat_collection = db["chat"]
         user_collection = db["users"]
         # received_data = self.request.recv(2048)
-        print(received_data)
+        # print(received_data)
 
     # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
 
@@ -191,7 +191,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             encodedPassword = password.encode()
             hashedPassword = bcrypt.hashpw(encodedPassword,salt)
             # auth = b""
-            user_collection.insert_one({"username": username,"password":hashedPassword,"Auth": None})
+            user_collection.insert_one({"username": username,"password":hashedPassword,"Auth": None, "pic": "public/image/eagle.jpg"})
 
         elif request.path == "/websocket":
             key = request.headers["Sec-WebSocket-Key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -211,6 +211,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                         user = user_collection.find_one({"Auth": cookie[1]})
                         username = user["username"]
                         print(username)
+                        print(user["Auth"])
                         hol = True
             if hol == False:
                 username = "guest"
@@ -218,11 +219,15 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             responseString = "" + request.http_version + " 101 Switching Protocols" + "\r\n" +"Upgrade: websocket"+"\r\n" +"Connection: Upgrade"+"\r\n"+"Sec-WebSocket-Accept: " + baseKey+"\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: " + str(0) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
             # print(responseString)
             self.request.sendall(responseString.encode())
+            # MyTCPHandler.websocket_connections.append(self.request)
+
             while True:
                 received_data = self.request.recv(2048)
                 # print(received_data)
                 opcode = received_data[0] & 15 # 0000 1111the first 4 bits are zeroed and the last 4 are opcode
                 print(opcode)
+                if opcode == 8:
+                    break
                 finBit = received_data[0] & 128 #1000 0000 gets the first bit
                 if finBit == 128:
                     finBit = 1
@@ -263,18 +268,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                         payload.append(received_data[i])
                         i += 1
                         payloadLenCopy -=1
-
-                # print(payload)
-                # print(payload.decode())
                 payload = payload.decode()
                 print(payload)
                 payload = json.loads(payload)
                 print(payload["message"])#user comment
                 message = payload["message"]
                 type = payload["messageType"]
-                id = username + secrets.token_hex()
+                id = username + secrets.token_hex(10)
                 #escape user comments
-
                 message = message.replace("&","&amp;")
                 message = message.replace("<","&lt;")
                 message = message.replace(">","&gt;")
@@ -283,20 +284,40 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 payload["id"] = id
                 payload["username"] = username
                 payloadJson = json.dumps(payload)
+                print("json payload: " + payloadJson)
                 payloadJson = payloadJson.encode()
                 sendPayloadLen = len(payloadJson)
+                print("payloadLength: " + str(sendPayloadLen))
                 sendArr = bytearray()
                 byte1 = finBit *128 + opcode
+                print(byte1)
+                chat_collection.insert_one({ "username": username,"message":message,"messageType": 'chatMessage'})
+                ####Im not cal
+                ###########store chat messages into database
                 sendArr.append(byte1)
-                sendArr.append(sendPayloadLen)
-                sendArr.append(payloadJson)
+                ##adding mask
+                byte2 = 0
+                if sendPayloadLen < 126:
+                    byte2 = sendPayloadLen
+                    sendArr.append(byte2)
+                elif sendPayloadLen >= 126 and sendPayloadLen < 65536:
+                    print("medium")
+                    byte2 = 128 & 126
+                    sendArr.append(byte2)
+                    sendArr.append(sendPayloadLen)
+                elif sendPayloadLen >= 65536:
+                    print("large")
+                    byte2 = 128 & 127
+                    sendArr.append(byte2)
+                    sendArr.append(sendPayloadLen)
+                pa = bytearray(payloadJson)
+                sendArr = sendArr + pa
                 print(sendArr)
-                #add the numbers together
-                #how to put the bits together into a byte and send?
-                #What should I do when I send a frame?
-                    #
-                #This loop should be running forever right?
-                    #stop it when I get the opcode to stop it and self to end it on that specific object
+
+                ######### I need to make sure that im sending it to every client and then disconnect the specific client that disconnects
+                ## is this the correct format? and how do i send the fram back
+                ##loop thru all the sockets connected to my server
+                self.request.sendall(sendArr)
                 pass
 
         elif request.path == "/login":
