@@ -6,6 +6,8 @@ import json
 import secrets
 from pymongo import MongoClient
 import hashlib
+
+from util.buff import Buffer
 from util.request import Request
 from util.sockParse import SockParse
 
@@ -22,9 +24,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if len(received_data) == 0:
             return
         request = Request(received_data)
-        # MyTCPHandler.websocket_connections.append(self.request)
-        # mongoclient = MongoClient("mongo")
-        mongoclient = MongoClient("localhost")
+        # MyTCPHandler.websocket_connections.append(self)
+        mongoclient = MongoClient("mongo")
+        # mongoclient = MongoClient("localhost")
         db = mongoclient["cse312"]
         chat_collection = db["chat"]
         user_collection = db["users"]
@@ -210,8 +212,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     if cookie[0] == "Auth" or cookie[0] == " Auth":
                         user = user_collection.find_one({"Auth": cookie[1]})
                         username = user["username"]
-                        print(username)
-                        print(user["Auth"])
+                        # print(username)
+                        # print(user["Auth"])
                         hol = True
             if hol == False:
                 username = "guest"
@@ -219,7 +221,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             responseString = "" + request.http_version + " 101 Switching Protocols" + "\r\n" +"Upgrade: websocket"+"\r\n" +"Connection: Upgrade"+"\r\n"+"Sec-WebSocket-Accept: " + baseKey+"\r\n"+ "Content-Type: text/html; charset=utf-8" + "\r\n" + "Content-Length: " + str(0) + "\r\n" + "X-Content-Type-Options: nosniff" + "\r\n\r\n"
             # print(responseString)
             self.request.sendall(responseString.encode())
-            # MyTCPHandler.websocket_connections.append(self.request)
+            MyTCPHandler.websocket_connections.append(self.request)
 
             while True:
                 received_data = self.request.recv(2048)
@@ -227,6 +229,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 opcode = received_data[0] & 15 # 0000 1111the first 4 bits are zeroed and the last 4 are opcode
                 print(opcode)
                 if opcode == 8:
+                    MyTCPHandler.websocket_connections.remove(self.request)
                     break
                 finBit = received_data[0] & 128 #1000 0000 gets the first bit
                 if finBit == 128:
@@ -317,7 +320,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 ######### I need to make sure that im sending it to every client and then disconnect the specific client that disconnects
                 ## is this the correct format? and how do i send the fram back
                 ##loop thru all the sockets connected to my server
-                self.request.sendall(sendArr)
+                for connect in MyTCPHandler.websocket_connections:
+                    connect.sendall(sendArr)
                 pass
 
         elif request.path == "/login":
@@ -329,20 +333,20 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             # "Content-Length"])
             length = request.headers["Content-Length"]
             username = body.split("&")[0].split("=")[1]
-            print(username)
+            # print(username)
             password = body.split("&")[1].split("=")[1]
-            print(password)
+            # print(password)
             if user_collection.find_one({"username": username}) == None:
                 print("user not foound")
             # print(user_collection.find_one({"username": username})["password"])
             elif bcrypt.checkpw(password.encode(),user_collection.find_one({"username": username})["password"]):
                 print("logged in")
                 authtoken = secrets.token_bytes()
-                print("token: " + str(authtoken))
+                # print("token: " + str(authtoken))
                 # sha256 = hashlib.sha256(authtoken).digest()
                 # authTokenHash = sha256.update(authtoken)
                 authTokenHash = hashlib.sha256(authtoken).hexdigest()
-                print("hashed: "  +str(authTokenHash))
+                # print("hashed: "  +str(authTokenHash))
                 # use find
                 user_collection.find_one({"username": username})
                 user_collection.update_one({"username":username}, {"$set":{"Auth": authTokenHash}})
@@ -371,6 +375,12 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         elif request.path == "/profile-pic":
             cookieheader = request.headers.get("Cookie")
+            while request.len < int(request.neededLen):
+                received_data = self.request.recv(2048)
+                print(received_data)
+                request2 = Buffer(received_data)
+                request.len += len(request2.buffy)
+                request.body = request.body + request2.buffy
             print("profiel pic")
             if cookieheader != None:
                 cookieheader = cookieheader.split(";")

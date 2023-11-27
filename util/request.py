@@ -30,12 +30,22 @@ def pic(request):
     bound = heads[0]
     for item in heads[1:]:
         headers[item.split(": ")[0]] = item.split(": ")[1]
-    # requestSplit[1] = requestSplit[1].split(("\r\n"+bound+"--"+"\r\n").encode())
-    # print(requestSplit[2])
-    file = requestSplit[2].split("-".encode())
-
-    # print({"method":meth,"path":path,"headers":headers,"body":file[0]})
-    return {"method":meth,"path":path,"headers":headers,"body":file[0],"http":http}
+    # requestSplit[1] = requestSplit[1].split(("\r
+    # \n"+bound+"--"+"\r\n").encode())
+    # #getting content length
+    # contentLen = heads[1].split(": ")[1] #length of of bytes taken needs to add four to it to equal content length cuz of splitting at "\r\n\r\n"
+    # print(contentLen)
+    contentLen = headers["Content-Length"]
+    file = []
+    if len(requestSplit) == 2:
+        currLen = 0
+        print({"method": meth, "path": path, "headers": headers, "body": b''})
+        return {"method": meth, "path": path, "headers": headers, "body": b'', "http": http, "len": currLen,"neededLen": contentLen}
+    else:
+        file = file + requestSplit[2].split("--".encode())
+        currLen = len(requestSplit[1]) + len(requestSplit[2]) + 4
+        print({"method": meth, "path": path, "headers": headers, "body": file[0]})
+        return {"method": meth, "path": path, "headers": headers, "body": file[0], "http": http, "len": currLen,"neededLen": contentLen}
 
 class Request:
 
@@ -51,9 +61,11 @@ class Request:
             self.headers = res["headers"]
             self.body = res["body"]
             self.http_version = res["http"]
+            self.len = res['len']
+            self.neededLen = res["neededLen"]
 
         else:
-            print(request)
+            # print(request)
             decoded = request.decode()
             decoded.strip()
             # print("preprocc" + str(decoded))
