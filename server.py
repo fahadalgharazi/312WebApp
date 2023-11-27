@@ -271,6 +271,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                         payload.append(received_data[i])
                         i += 1
                         payloadLenCopy -=1
+
                 payload = payload.decode()
                 print(payload)
                 payload = json.loads(payload)
@@ -463,8 +464,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
 def main():
     host = "0.0.0.0"
-    port = 8000
-    # port = 8080
+    # port = 8000
+    port = 8080
 
     socketserver.TCPServer.allow_reuse_address = True
 
