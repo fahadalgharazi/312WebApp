@@ -25,8 +25,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             return
         request = Request(received_data)
         # MyTCPHandler.websocket_connections.append(self)
-        mongoclient = MongoClient("mongo")
-        # mongoclient = MongoClient("localhost")
+        # mongoclient = MongoClient("mongo")
+        mongoclient = MongoClient("localhost")
         db = mongoclient["cse312"]
         chat_collection = db["chat"]
         user_collection = db["users"]
@@ -222,108 +222,127 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             # print(responseString)
             self.request.sendall(responseString.encode())
             MyTCPHandler.websocket_connections.append(self.request)
-
+            buffer = bytearray()
             while True:
+                #maybe switch to finbit if this doenst work
                 received_data = self.request.recv(2048)
-                # print(received_data)
-                opcode = received_data[0] & 15 # 0000 1111the first 4 bits are zeroed and the last 4 are opcode
-                print(opcode)
-                if opcode == 8:
-                    MyTCPHandler.websocket_connections.remove(self.request)
+                if not received_data:
                     break
-                finBit = received_data[0] & 128 #1000 0000 gets the first bit
-                if finBit == 128:
-                    finBit = 1
-                else:
-                    finBit = 0
-                print(finBit)
-                mask = received_data[1] & 128
-                if mask == 128:
-                    mask = 1
-                else:
-                    mask = 0
-                print(mask)
-                payloadLen = received_data[1] & 127
-                print(payloadLen)
-                payloadLenCopy = payloadLen
-                payload = bytearray()
-                #how should I accumalate the payload?
-                if mask == 1:
-                    maskingKey = received_data[2:6]
-                    i = 6
+                buffer.extend(received_data)
+                while True:
+                    sendArr = bytearray()
+                    if len(buffer) < 2:
+                        break
 
-                    while payloadLenCopy >=4:
-                        payload.append(received_data[i] ^ maskingKey[0])
-                        payload.append(received_data[i+1] ^ maskingKey[1])
-                        payload.append(received_data[i+2] ^ maskingKey[2])
-                        payload.append(received_data[i+3] ^ maskingKey[3])
-                        i +=4
-                        payloadLenCopy -= 4
-                    m = 0
-                    while payloadLenCopy != 0:
-                        payload.append(received_data[i] ^ maskingKey[m])
-                        i += 1
-                        m +=1
-                        payloadLenCopy -=1
+                    #Start reading for frame info
+                    opcode = buffer[0] & 15  # 0000 1111the first 4 bits are zeroed and the last 4 are opcode
+                    if opcode == 8:
+                        MyTCPHandler.websocket_connections.remove(self.request)
+                        break
+                    #####FinBit
+                    finBit = buffer[0] & 128  #1000 0000 gets the first bit
+                    if finBit == 128:
+                        finBit = 1
+                    else:
+                        finBit = 0
+                    ####MaskBit
+                    maskBit = buffer[1] & 128
+                    if maskBit == 128:
+                        maskBit = 1
+                    else:
+                        maskBit = 0
 
-                else:
-                    while payloadLenCopy != 0:
-                        payload.append(received_data[i])
-                        i += 1
-                        payloadLenCopy -=1
-
-                payload = payload.decode()
-                print(payload)
-                payload = json.loads(payload)
-                print(payload["message"])#user comment
-                message = payload["message"]
-                type = payload["messageType"]
-                id = username + secrets.token_hex(10)
-                #escape user comments
-                message = message.replace("&","&amp;")
-                message = message.replace("<","&lt;")
-                message = message.replace(">","&gt;")
-                ###
-                payload["message"] = message
-                payload["id"] = id
-                payload["username"] = username
-                payloadJson = json.dumps(payload)
-                print("json payload: " + payloadJson)
-                payloadJson = payloadJson.encode()
-                sendPayloadLen = len(payloadJson)
-                print("payloadLength: " + str(sendPayloadLen))
-                sendArr = bytearray()
-                byte1 = finBit *128 + opcode
-                print(byte1)
-                chat_collection.insert_one({ "username": username,"message":message,"messageType": 'chatMessage'})
-                ####Im not cal
-                ###########store chat messages into database
-                sendArr.append(byte1)
-                ##adding mask
-                byte2 = 0
-                if sendPayloadLen < 126:
-                    byte2 = sendPayloadLen
-                    sendArr.append(byte2)
-                elif sendPayloadLen >= 126 and sendPayloadLen < 65536:
-                    print("medium")
-                    byte2 = 128 & 126
-                    sendArr.append(byte2)
-                    sendArr.append(sendPayloadLen)
-                elif sendPayloadLen >= 65536:
-                    print("large")
-                    byte2 = 128 & 127
-                    sendArr.append(byte2)
-                    sendArr.append(sendPayloadLen)
-                pa = bytearray(payloadJson)
-                sendArr = sendArr + pa
-                print(sendArr)
-
-                ######### I need to make sure that im sending it to every client and then disconnect the specific client that disconnects
-                ## is this the correct format? and how do i send the fram back
-                ##loop thru all the sockets connected to my server
+                    payloadLen = buffer[1] & 127 # 0111 1111
+                    paysize = 0
+                    if payloadLen == 126:
+                        paysize = 2
+                        print("medium message")
+                        payloadLen = int.from_bytes(buffer[3:5], byteorder='big')#gets the length from the 3 byte and 4 byte
+                    elif payloadLen == 127:
+                        paysize = 8
+                        print("large messaage")
+                        payloadLen = int.from_bytes(buffer[3:11], byteorder='big') #gets the length from the 3 byte to10byte
+                    else:
+                        paysize = 0
+                        print("small message")
+                    payloadLenCopy = payloadLen
+                    payload = bytearray()
+                    if maskBit ==1:
+                        maskingKey = received_data[2 + paysize : 6 + paysize]
+                        i = 6
+                        while payloadLenCopy >= 4:
+                            payload.append(received_data[i] ^ maskingKey[0])
+                            payload.append(received_data[i + 1] ^ maskingKey[1])
+                            payload.append(received_data[i + 2] ^ maskingKey[2])
+                            payload.append(received_data[i + 3] ^ maskingKey[3])
+                            i += 4
+                            payloadLenCopy -= 4
+                        m = 0
+                        while payloadLenCopy != 0:
+                            payload.append(received_data[i] ^ maskingKey[m])
+                            i += 1
+                            m += 1
+                            payloadLenCopy -= 1
+                    else:
+                        i = 2 + paysize
+                        while payloadLenCopy >= 4:
+                            payload.append(received_data[i])
+                            payload.append(received_data[i + 1])
+                            payload.append(received_data[i + 2])
+                            payload.append(received_data[i + 3])
+                            i += 4
+                            payloadLenCopy -= 4
+                        m = 0
+                        while payloadLenCopy != 0:
+                            payload.append(received_data[i])
+                            i += 1
+                            m += 1
+                            payloadLenCopy -= 1
+                    ###payload accumlated
+                    print(payload)
+                    payload = payload.decode()
+                    payload = json.loads(payload)
+                    # print(payload)
+                    message = payload["message"]
+                    type = payload["messageType"]
+                    id = username + secrets.token_hex(10)
+                    # escape user comments
+                    message = message.replace("&", "&amp;")
+                    message = message.replace("<", "&lt;")
+                    message = message.replace(">", "&gt;")
+                    ###
+                    payload["message"] = message
+                    payload["id"] = id
+                    payload["username"] = username
+                    payloadJson = json.dumps(payload)
+                    print(payloadJson)
+                    payloadJson = payloadJson.encode()
+                    sendPayloadLen = len(payloadJson)
+                    sendArr = bytearray()
+                    byte1 = finBit * 128 + opcode
+                    chat_collection.insert_one({"username": username, "message": message, "messageType": 'chatMessage'})
+                    sendArr.append(byte1)
+                    byte2 = 0
+                    if sendPayloadLen < 126:
+                        byte2 = sendPayloadLen
+                        sendArr.append(byte2)
+                    elif sendPayloadLen >= 126 and sendPayloadLen < 65536:
+                        print("medium")
+                        byte2 = 128 | 126
+                        sendArr.append(byte2)
+                        sendArr.extend(sendPayloadLen.to_bytes(2, byteorder='big'))
+                    elif sendPayloadLen >= 65536:
+                        print("large")
+                        byte2 = 128 | 127
+                        sendArr.extend(sendPayloadLen.to_bytes(8, byteorder='big'))
+                        #maybe its not covering all 2 bytes for the length so its messing up the format
+                        sendArr.append(sendPayloadLen)
+                    pa = bytearray(payloadJson)
+                    sendArr = sendArr + pa
+                    print(sendArr)
                 for connect in MyTCPHandler.websocket_connections:
                     connect.sendall(sendArr)
-                pass
+
 
         elif request.path == "/login":
             #get the username and the password from the encoded url whcih will be in the body of the request
